@@ -5,9 +5,11 @@ import torch.nn as nn
 from AdvAugment import AdvAug
 
 def _create_model_training_folder(writer, files_to_same):
+    # 创建模型训练文件夹
     model_checkpoints_folder = os.path.join(writer.log_dir, 'checkpoints')
     if not os.path.exists(model_checkpoints_folder):
         os.makedirs(model_checkpoints_folder)
+        # 将文件复制到模型训练文件夹中
         for file in files_to_same:
             copyfile(file, os.path.join(model_checkpoints_folder, os.path.basename(file)))
 
@@ -15,29 +17,30 @@ class Data_augment(nn.Module):
     def __init__(self, rotate=False, flip=False, rotate_and_flip=False, awgn=False, add_noise=False, slice=False, isAdvAug=False):
         super(Data_augment, self).__init__()
 
-        self.rotate = rotate
-        self.rotate_angle = [0,90,180,270]
+        self.rotate = rotate   # 是否进行旋转
+        self.rotate_angle = [0,90,180,270]   # 旋转的角度列表
 
-        self.flip = flip
+        self.flip = flip   # 是否进行翻转
 
-        self.rotate_and_flip = rotate_and_flip
+        self.rotate_and_flip = rotate_and_flip   # 是否同时进行旋转和翻转
 
-        self.awgn = awgn
-        self.noise_snr = [10, 20]  # 10~20
+        self.awgn = awgn   # 是否加入高斯白噪声
+        self.noise_snr = [10, 20]  # 10~20   # 信噪比范围（db）
 
-        self.add_noise = add_noise
-        self.mean = 0
-        self.std = 0.1
+        self.add_noise = add_noise    # 是否加入随机噪声
+        self.mean = 0   # 噪声的均值
+        self.std = 0.1  # 噪声的标准差
 
-        self.slice = slice
-        self.slice_len = 2400
+        self.slice = slice   # 是否对信号进行切片
+        self.slice_len = 2400   # 切片长度
 
-        self.isAdvAug = isAdvAug
-        self.n_power = 1
-        self.XI = 0.01
-        self.epsilon = 1.0
+        self.isAdvAug = isAdvAug   # 是否使用对抗性样本增强
+        self.n_power = 1   # VAT 中计算对抗扰动的次数
+        self.XI = 0.01   # VAT中的超参数，扰动大小
+        self.epsilon = 1.0   # VAT中的超参数，扰动幅度
 
     def rotation_2d(self, x, ang):
+        # 对二维信号进行旋转
         x_aug = torch.zeros(x.shape)
         if ang == 0:
             x_aug = x
@@ -54,11 +57,13 @@ class Data_augment(nn.Module):
         return x_aug
 
     def get_normalized_vector(self, d):
+        # 计算规范化向量
         d_reshaped = d.view(d.shape[0], -1, *(1 for _ in range(d.dim() - 2)))
         d /= torch.norm(d_reshaped, dim=1, keepdim=True) + 1e-8
         return d
 
     def Rotate(self, x):
+        # 对信号向量进行随机旋转
         x_rotate = torch.zeros(x.shape)
         for i in range(x.shape[0]):
             ang = self.rotate_angle[torch.randint(len(self.rotate_angle), [1])]
@@ -66,6 +71,7 @@ class Data_augment(nn.Module):
         return x_rotate.cuda()
 
     def Flip(self, x):
+        # 对信号进行随机翻转
         mul = [-1, 1]
         for i in range(x.shape[0]):
             I_mul = mul[torch.randint(len(mul), [1])]
@@ -75,6 +81,7 @@ class Data_augment(nn.Module):
         return x
 
     def Rotate_and_Flip(self, x):
+        # 对信号同时进行旋转和翻转
         choice_list = ['Rotate', 'Flip', 'Flip']  # Rotate的0和180与Flip中重复，所以Flip有4种，Rotate有2种，为了保持每种概率都是1/6，给Rotate1/3概率，给Flip2/3概率
         rotate_angle = [90, 270]
         mul = [-1, 1]
@@ -118,10 +125,12 @@ class Data_augment(nn.Module):
         return x_awgn
 
     def Add_noise(self, x):
+        # 加入随机噪声
         d = torch.normal(mean=self.mean, std=self.std, size=(x.shape[0], x.shape[1], x.shape[2]))
         return x + d
 
     def Slice(self, x):
+        # 对信号进行切片
         start = torch.randint(0, x.shape[2] - self.slice_len, [1])
         end = start + self.slice_len
         return x[:, :, start:end]
